@@ -12,22 +12,24 @@ proto_dhcp_init_config() {
 	proto_config_add_string "vendorid"
 	proto_config_add_boolean "broadcast"
 	proto_config_add_string "reqopts"
+	proto_config_add_string "iface6rd"
 }
 
 proto_dhcp_setup() {
 	local config="$1"
 	local iface="$2"
 
-	local ipaddr hostname clientid vendorid broadcast reqopts
-	json_get_vars ipaddr hostname clientid vendorid broadcast reqopts
+	local ipaddr hostname clientid vendorid broadcast reqopts iface6rd
+	json_get_vars ipaddr hostname clientid vendorid broadcast reqopts iface6rd
 
 	local opt dhcpopts
 	for opt in $reqopts; do
 		append dhcpopts "-O $opt"
 	done
 
-	[ "$broadcast" = 1 ] && broadcast="-O broadcast" || broadcast=
+	[ "$broadcast" = 1 ] && broadcast="-B" || broadcast=
 	[ -n "$clientid" ] && clientid="-x 0x3d:${clientid//:/}" || clientid="-C"
+	[ -n "$iface6rd" ] && proto_export "IFACE6RD=$iface6rd"
 
 	proto_export "INTERFACE=$config"
 	proto_run_command "$config" udhcpc \
