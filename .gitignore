@@ -6,6 +6,7 @@
 /.config
 /.config.old
 /bin
+/bin.old
 /build_dir
 /staging_dir
 /tmp
@@ -22,3 +23,5 @@
 *#
 .emacs.desktop*
 TAGS*~
+*.log
+*.bak
