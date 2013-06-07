@@ -1,0 +1,13 @@
+open: $ sudo apt-get install build-essential subversion git-core libncurses5-dev zlib1g-dev gawk flex quilt libssl-dev xsltproc libxml-parser-perl 
+tuto: $ sudo apt-get install build-essential subversion asciidoc autoconf binutils bison bzip2 flex gawk gettext libncurses5-dev libz-dev patch unzip zlib1g-dev 
+garg:   sudo apt-get install build-essential asciidoc binutils bzip2 gawk gettext git libncurses5-dev libz-dev patch unzip zlib1g-dev subversion flex uglifyjs 
+sugg: debian-keyring bison g++-multilib g++-4.7-multilib gcc-4.7-doc libstdc++6-4.7-dbg gawk-doc git-daemon-run
+  git-daemon-sysvinit git-doc git-el git-arch git-cvs git-svn git-email git-gui gitk gitweb ncurses-doc
+  libstdc++6-4.7-doc procmail graphviz default-mta mail-transport-agent subversion-tools db5.1-util
+
+
+own: sudo apt-get install build-essential subversion git-core libncurses5-dev zlib1g-dev gawk flex quilt libssl-dev xsltproc libxml-parser-perl bison patch unzip bzip2 binutils
+
+ubuntu 12.4 sudo apt-get install build-essential subversion git-core libncurses5-dev zlib1g-dev gawk flex quilt libssl-dev xsltproc libxml-parser-perl
+
+own 2: sudo apt-get install asciidoc autoconf binutils bison build-essential bzip2 flex gawk gettext git libncurses5-dev libssl-dev libxml-parser-perl libz-dev patch quilt subversion uglifyjs unzip xsltproc zlib1g-dev 
