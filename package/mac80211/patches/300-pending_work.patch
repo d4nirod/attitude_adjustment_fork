@@ -239,7 +239,17 @@
  		break;
  	case cpu_to_le16(IEEE80211_STYPE_ASSOC_RESP):
  	case cpu_to_le16(IEEE80211_STYPE_REASSOC_RESP):
-@@ -3059,10 +3067,16 @@ static int prepare_for_handlers(struct i
+@@ -3008,6 +3016,9 @@ static int prepare_for_handlers(struct i
+ 	case NL80211_IFTYPE_ADHOC:
+ 		if (!bssid)
+ 			return 0;
++		if (ether_addr_equal(sdata->vif.addr, hdr->addr2) ||
++		    ether_addr_equal(sdata->u.ibss.bssid, hdr->addr2))
++			return 0;
+ 		if (ieee80211_is_beacon(hdr->frame_control)) {
+ 			return 1;
+ 		} else if (!ieee80211_bssid_match(bssid, sdata->u.ibss.bssid)) {
+@@ -3059,10 +3070,16 @@ static int prepare_for_handlers(struct i
  		}
  		break;
  	case NL80211_IFTYPE_WDS:
@@ -1036,3 +1046,31 @@
  		cfg80211_stop_ap(rdev, dev);
  		break;
  	default:
+--- a/drivers/net/wireless/rt2x00/rt2800lib.c
++++ b/drivers/net/wireless/rt2x00/rt2800lib.c
+@@ -5404,19 +5404,20 @@ int rt2800_enable_radio(struct rt2x00_de
+ 		     rt2800_init_registers(rt2x00dev)))
+ 		return -EIO;
+ 
++	if (unlikely(rt2800_wait_bbp_rf_ready(rt2x00dev)))
++		return -EIO;
++
+ 	/*
+ 	 * Send signal to firmware during boot time.
+ 	 */
+ 	rt2800_register_write(rt2x00dev, H2M_BBP_AGENT, 0);
+ 	rt2800_register_write(rt2x00dev, H2M_MAILBOX_CSR, 0);
+-	if (rt2x00_is_usb(rt2x00dev)) {
++	if (rt2x00_is_usb(rt2x00dev))
+ 		rt2800_register_write(rt2x00dev, H2M_INT_SRC, 0);
+-		rt2800_mcu_request(rt2x00dev, MCU_BOOT_SIGNAL, 0, 0, 0);
+-	}
++	rt2800_mcu_request(rt2x00dev, MCU_BOOT_SIGNAL, 0, 0, 0);
+ 	msleep(1);
+ 
+-	if (unlikely(rt2800_wait_bbp_rf_ready(rt2x00dev) ||
+-		     rt2800_wait_bbp_ready(rt2x00dev)))
++	if (unlikely(rt2800_wait_bbp_ready(rt2x00dev)))
+ 		return -EIO;
+ 
+ 	rt2800_init_bbp(rt2x00dev);
