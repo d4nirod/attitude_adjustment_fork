@@ -383,7 +383,54 @@
  static void ath_tx_complete_buf(struct ath_softc *sc, struct ath_buf *bf,
 --- a/drivers/net/wireless/ath/ath9k/main.c
 +++ b/drivers/net/wireless/ath/ath9k/main.c
-@@ -2094,7 +2094,7 @@ static void ath9k_wow_add_pattern(struct
+@@ -209,6 +209,7 @@ static bool ath_complete_reset(struct at
+ 	struct ath_hw *ah = sc->sc_ah;
+ 	struct ath_common *common = ath9k_hw_common(ah);
+ 	unsigned long flags;
++	int i;
+ 
+ 	if (ath_startrecv(sc) != 0) {
+ 		ath_err(common, "Unable to restart recv logic\n");
+@@ -236,6 +237,15 @@ static bool ath_complete_reset(struct at
+ 		}
+ 	work:
+ 		ath_restart_work(sc);
++
++		for (i = 0; i < ATH9K_NUM_TX_QUEUES; i++) {
++			if (!ATH_TXQ_SETUP(sc, i))
++				continue;
++
++			spin_lock_bh(&sc->tx.txq[i].axq_lock);
++			ath_txq_schedule(sc, &sc->tx.txq[i]);
++			spin_unlock_bh(&sc->tx.txq[i].axq_lock);
++		}
+ 	}
+ 
+ 	if ((ah->caps.hw_caps & ATH9K_HW_CAP_ANT_DIV_COMB) && sc->ant_rx != 3)
+@@ -543,21 +553,10 @@ chip_reset:
+ 
+ static int ath_reset(struct ath_softc *sc)
+ {
+-	int i, r;
++	int r;
+ 
+ 	ath9k_ps_wakeup(sc);
+-
+ 	r = ath_reset_internal(sc, NULL);
+-
+-	for (i = 0; i < ATH9K_NUM_TX_QUEUES; i++) {
+-		if (!ATH_TXQ_SETUP(sc, i))
+-			continue;
+-
+-		spin_lock_bh(&sc->tx.txq[i].axq_lock);
+-		ath_txq_schedule(sc, &sc->tx.txq[i]);
+-		spin_unlock_bh(&sc->tx.txq[i].axq_lock);
+-	}
+-
+ 	ath9k_ps_restore(sc);
+ 
+ 	return r;
+@@ -2094,7 +2093,7 @@ static void ath9k_wow_add_pattern(struct
  {
  	struct ath_hw *ah = sc->sc_ah;
  	struct ath9k_wow_pattern *wow_pattern = NULL;
@@ -1074,3 +1121,114 @@
  		return -EIO;
  
  	rt2800_init_bbp(rt2x00dev);
+--- a/net/mac80211/main.c
++++ b/net/mac80211/main.c
+@@ -101,7 +101,7 @@ static u32 ieee80211_hw_conf_chan(struct
+ 	struct ieee80211_sub_if_data *sdata;
+ 	struct cfg80211_chan_def chandef = {};
+ 	u32 changed = 0;
+-	int power;
++	int power = 0;
+ 	u32 offchannel_flag;
+ 
+ 	offchannel_flag = local->hw.conf.flags & IEEE80211_CONF_OFFCHANNEL;
+@@ -155,16 +155,16 @@ static u32 ieee80211_hw_conf_chan(struct
+ 		changed |= IEEE80211_CONF_CHANGE_SMPS;
+ 	}
+ 
+-	power = chandef.chan->max_power;
+-
+ 	rcu_read_lock();
+ 	list_for_each_entry_rcu(sdata, &local->interfaces, list) {
+ 		if (!rcu_access_pointer(sdata->vif.chanctx_conf))
+ 			continue;
+-		power = min(power, sdata->vif.bss_conf.txpower);
++		power = max(power, sdata->vif.bss_conf.txpower);
+ 	}
+ 	rcu_read_unlock();
+ 
++	power = min(power, chandef.chan->max_power);
++
+ 	if (local->hw.conf.power_level != power) {
+ 		changed |= IEEE80211_CONF_CHANGE_POWER;
+ 		local->hw.conf.power_level = power;
+--- a/net/mac80211/cfg.c
++++ b/net/mac80211/cfg.c
+@@ -3332,7 +3332,7 @@ static int ieee80211_probe_client(struct
+ 		return -EINVAL;
+ 	}
+ 	band = chanctx_conf->def.chan->band;
+-	sta = sta_info_get(sdata, peer);
++	sta = sta_info_get_bss(sdata, peer);
+ 	if (sta) {
+ 		qos = test_sta_flag(sta, WLAN_STA_WME);
+ 	} else {
+--- a/net/mac80211/status.c
++++ b/net/mac80211/status.c
+@@ -180,6 +180,9 @@ static void ieee80211_frame_acked(struct
+ 	struct ieee80211_local *local = sta->local;
+ 	struct ieee80211_sub_if_data *sdata = sta->sdata;
+ 
++	if (local->hw.flags & IEEE80211_HW_REPORTS_TX_ACK_STATUS)
++		sta->last_rx = jiffies;
++
+ 	if (ieee80211_is_data_qos(mgmt->frame_control)) {
+ 		struct ieee80211_hdr *hdr = (void *) skb->data;
+ 		u8 *qc = ieee80211_get_qos_ctl(hdr);
+--- a/net/mac80211/tx.c
++++ b/net/mac80211/tx.c
+@@ -1101,7 +1101,8 @@ ieee80211_tx_prepare(struct ieee80211_su
+ 		tx->sta = rcu_dereference(sdata->u.vlan.sta);
+ 		if (!tx->sta && sdata->dev->ieee80211_ptr->use_4addr)
+ 			return TX_DROP;
+-	} else if (info->flags & IEEE80211_TX_CTL_INJECTED ||
++	} else if (info->flags & (IEEE80211_TX_CTL_INJECTED |
++				  IEEE80211_TX_INTFL_NL80211_FRAME_TX) ||
+ 		   tx->sdata->control_port_protocol == tx->skb->protocol) {
+ 		tx->sta = sta_info_get_bss(sdata, hdr->addr1);
+ 	}
+--- a/drivers/net/wireless/ath/ath5k/base.c
++++ b/drivers/net/wireless/ath/ath5k/base.c
+@@ -1628,15 +1628,15 @@ ath5k_tx_frame_completed(struct ath5k_hw
+ 	ah->stats.tx_bytes_count += skb->len;
+ 	info = IEEE80211_SKB_CB(skb);
+ 
++	size = min_t(int, sizeof(info->status.rates), sizeof(bf->rates));
++	memcpy(info->status.rates, bf->rates, size);
++
+ 	tries[0] = info->status.rates[0].count;
+ 	tries[1] = info->status.rates[1].count;
+ 	tries[2] = info->status.rates[2].count;
+ 
+ 	ieee80211_tx_info_clear_status(info);
+ 
+-	size = min_t(int, sizeof(info->status.rates), sizeof(bf->rates));
+-	memcpy(info->status.rates, bf->rates, size);
+-
+ 	for (i = 0; i < ts->ts_final_idx; i++) {
+ 		struct ieee80211_tx_rate *r =
+ 			&info->status.rates[i];
+--- a/drivers/net/wireless/rt2x00/rt2800usb.c
++++ b/drivers/net/wireless/rt2x00/rt2800usb.c
+@@ -176,8 +176,8 @@ static bool rt2800usb_tx_sta_fifo_read_c
+ 		queue_work(rt2x00dev->workqueue, &rt2x00dev->txdone_work);
+ 
+ 	if (rt2800usb_txstatus_pending(rt2x00dev)) {
+-		/* Read register after 250 us */
+-		hrtimer_start(&rt2x00dev->txstatus_timer, ktime_set(0, 250000),
++		/* Read register after 1 ms */
++		hrtimer_start(&rt2x00dev->txstatus_timer, ktime_set(0, 1000000),
+ 			      HRTIMER_MODE_REL);
+ 		return false;
+ 	}
+@@ -202,8 +202,8 @@ static void rt2800usb_async_read_tx_stat
+ 	if (test_and_set_bit(TX_STATUS_READING, &rt2x00dev->flags))
+ 		return;
+ 
+-	/* Read TX_STA_FIFO register after 500 us */
+-	hrtimer_start(&rt2x00dev->txstatus_timer, ktime_set(0, 500000),
++	/* Read TX_STA_FIFO register after 2 ms */
++	hrtimer_start(&rt2x00dev->txstatus_timer, ktime_set(0, 2000000),
+ 		      HRTIMER_MODE_REL);
+ }
+ 
