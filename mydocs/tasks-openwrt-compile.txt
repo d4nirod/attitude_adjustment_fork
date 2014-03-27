@@ -8,12 +8,14 @@
 
 
 BEFORE FLASHING
-- locate same version Gargoyle binary
+- locate current version of firmware binary
 - backup config
 - locate factory Netgear binary & backed up config
 - locate debricking instructions
 - backup cron jobs
 - backup button config
+- get list of installed packages
+
 
 ####make command
 make -j 3 V=99
