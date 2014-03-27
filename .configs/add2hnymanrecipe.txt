@@ -2,6 +2,6 @@ CONFIG_PACKAGE_wireless-tools=y
 CONFIG_PACKAGE_kmod-fs-nfs=m
 #CONFIG_PACKAGE_wpad-mini is not set
 
-
+CONFIG_PACKAGE_libiwinfo=y
 
 CONFIG_PACKAGE_kmod-lib-textsearch=y
