@@ -16,7 +16,50 @@ BEFORE FLASHING
 - backup button config
 - get list of installed packages
 
+PREPARATION BEFORE COMPILING
+----------------------------
+#Update OpenWRT source
+	git checkout master
+	git pull to update
+	Create new devel branch or merge master onto devel if already exists
 
-####make command
-make -j 3 V=99
-make -j 3 V=s 2>&1 | tee build.log | grep -i '(warn|error)'
+If it's not on forked repo copy custom regdb.txt to mac80211 package
+	cp package/kernel/mac80211/files/regdb.txt package/kernel/mac80211/files/regdb.txt.orig
+	cp regdb_custom.txt package/kernel/mac80211/files/regdb.txt
+
+http://wiki.openwrt.org/doc/howto/build
+Update feeds
+	./scripts/feeds update -a
+Make downloaded packages available to make menuconfig
+./scripts/feeds install -a
+
+
+#Image configuration
+Make backup of .config
+	cp .config .config.orig
+	
+Take config recipe and rename to .config
+	rm .config
+	cp myrecipe .config
+
+Expand recipe
+	make defconfig
+
+Create diff file (expanded recipe vs default config)
+	scripts/diffconfig.sh > myrecipe.diffconfig
+
+Restore backed up original config
+	rm .config
+	cp .config.orig .config
+
+Append diffconfig to original config
+	cat myrecipe.diffconfig >> .config
+
+Expand modified config
+	make defconfig
+
+
+#Compile image
+make command
+	#make -j 3 V=99
+	make -j 3 V=s 2>&1 | tee build.log | grep -i '(warn|error)'
